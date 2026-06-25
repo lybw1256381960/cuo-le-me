@@ -508,7 +508,7 @@ export default function HomeDashboard({
     if (!isDraggingRef.current) return;
     const currentX = e.clientX;
     const currentTime = performance.now();
-    const dt = currentTime - lastTimeRef.current;
+    const dt = Math.max(1, currentTime - lastTimeRef.current); // 防止dt为0
     const dx = currentX - lastXRef.current;
 
     const deltaX = currentX - dragStartXRef.current;
@@ -530,9 +530,9 @@ export default function HomeDashboard({
       handleDateSelect(nearestIdx, false); // select silently without showing full-screen loading masks during active gesture
     }
 
-    if (dt > 1) {
+    if (dt > 0) {
       const currentVel = -(dx / dt) * 16.6;
-      velocityRef.current = velocityRef.current * 0.4 + currentVel * 0.6;
+      velocityRef.current = velocityRef.current * 0.3 + currentVel * 0.7; // 更平滑的速度混合
     }
 
     lastXRef.current = currentX;
@@ -596,22 +596,24 @@ export default function HomeDashboard({
             handleDateSelect(nearestIdx, false); // silent during inertia kinetic gliding
           }
         } else {
-          // Responsive spring-mass-damper snapping system model (stiffness: 0.18, damping ratio: 0.7)
+          // Responsive spring-mass-damper snapping system model (optimized for smooth snapping)
           const targetOffset = selectedDateIdxRef.current * pitch;
           const diff = targetOffset - nextOffset;
 
-          const stiffnessValue = 0.18;
-          const dampingCoefficient = 0.7;
+          const stiffnessValue = 0.12; // 更柔和的刚度
+          const dampingCoefficient = 0.75; // 更好的阻尼
           const springForce = stiffnessValue * diff;
 
           velocityRef.current =
             velocityRef.current * dampingCoefficient + springForce;
           nextOffset += velocityRef.current;
 
-          if (Math.abs(diff) > 0.05 || Math.abs(velocityRef.current) > 0.05) {
+          // 更精确的收敛判断
+          if (Math.abs(diff) > 0.1 || Math.abs(velocityRef.current) > 0.1) {
             scrollOffsetRef.current = nextOffset;
             setScrollOffset(nextOffset);
-          } else if (scrollOffsetRef.current !== targetOffset) {
+          } else {
+            // 直接跳到目标位置，避免微小震动
             scrollOffsetRef.current = targetOffset;
             setScrollOffset(targetOffset);
             velocityRef.current = 0;
@@ -1039,9 +1041,9 @@ export default function HomeDashboard({
                     </>
                   )}
 
-                  <div className="relative z-10 w-full h-full flex flex-col items-center justify-center" style={{ gap: '2px' }}>
-                    <div className="flex items-center justify-center h-[14px]">
-                      <span className={`text-[9px] font-bold tracking-widest uppercase leading-none ${isSelected ? "text-[#1E3F39]/70 font-black" : "text-stone-400"}`}>
+                  <div className="relative z-10 w-full h-full flex flex-col items-center justify-center px-0.5" style={{ gap: '1px' }}>
+                    <div className="flex items-center justify-center h-[12px] w-full overflow-hidden">
+                      <span className={`text-[8px] font-bold tracking-widest uppercase leading-none whitespace-nowrap ${isSelected ? "text-[#1E3F39]/70 font-black" : "text-stone-400"}`} style={{ transform: 'scale(0.9)' }}>
                         {item.month}
                       </span>
                     </div>
@@ -1050,8 +1052,8 @@ export default function HomeDashboard({
                         {item.day}
                       </span>
                     </div>
-                    <div className="flex items-center justify-center h-[12px]">
-                      <span className={`text-[8.5px] font-extrabold uppercase tracking-wider leading-none ${isSelected ? "text-[#1E3F39]/60" : "text-stone-500"}`}>
+                    <div className="flex items-center justify-center h-[10px] w-full overflow-hidden">
+                      <span className={`text-[7.5px] font-extrabold uppercase tracking-wider leading-none whitespace-nowrap ${isSelected ? "text-[#1E3F39]/60" : "text-stone-500"}`} style={{ transform: 'scale(0.9)' }}>
                         {item.weekday}
                       </span>
                     </div>
