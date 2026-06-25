@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { MistakeCategory, MistakeEntry } from "../../types";
 import { getPainColorHSL } from "../../utils";
+import { API_BASE_URL } from "../../config/api";
 
 interface QuickNoteProps {
   initialDraft?: MistakeEntry | null;
@@ -111,7 +112,7 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
     if (!textToAnalyze || !textToAnalyze.trim()) return;
     setIsAnalyzingEmotion(true);
     try {
-      const res = await fetch("/api/analyze-emotion", {
+      const res = await fetch(`${API_BASE_URL}/api/analyze-emotion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: textToAnalyze }),
@@ -237,7 +238,7 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
   const handleAISuggestion = async () => {
     setAiLoading(true);
     try {
-      const res = await fetch("/api/ai-start-writing", {
+      const res = await fetch(`${API_BASE_URL}/api/ai-start-writing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contentType: "what", rawInput: content }),

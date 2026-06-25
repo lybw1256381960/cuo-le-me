@@ -296,7 +296,7 @@ export default function PersonalReport({ onBack, mistakes }: PersonalReportProps
     setShowAIReportModal(true);
     setAiReportData(null);
     try {
-      const resp = await fetch("/api/generate-weekly-report", {
+      const resp = await fetch(`${API_BASE_URL}/api/generate-weekly-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cycle }),
