@@ -1,0 +1,8 @@
+{
+  "name": "错了吗",
+  "description": "高逼格、结构化的人生错题本与反思成长助手。通过5Why原因拆解事实与情绪，提炼并验证行动原则，助你将每一次犯错转化为个人成长资产。",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

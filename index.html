@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script>
+      // Prevent sandboxed iframe SecurityError from alert/confirm
+      window.alert = function(msg) {
+        console.warn("[Override Alert]", msg);
+        window.dispatchEvent(new CustomEvent("app-system-toast", {
+          detail: { message: msg }
+        }));
+      };
+      window.confirm = function(msg) {
+        console.warn("[Override Confirm]", msg);
+        return true;
+      };
+      window.prompt = function(msg) {
+        console.warn("[Override Prompt]", msg);
+        return null;
+      };
+      // Prevent unhandled errors from breaking the iframe environment with Script Error
+      window.onerror = function(message, source, lineno, colno, error) {
+        var msg = message || "";
+        if (typeof msg !== "string") {
+          msg = String(msg);
+        }
+        var msgLower = msg.toLowerCase();
+        // Filter out benign Vite WebSocket, cross-origin safe/CORS "Script error", or ResizeObserver loop limit errors
+        if (!msg || msg.indexOf("websocket") > -1 || msg.indexOf("socket") > -1 || msgLower.indexOf("script error") > -1 || msgLower.indexOf("resizeobserver") > -1) {
+          return true; // Suppress and completely silence browser logging or bubbling
+        }
+        console.warn("[Intercepted Window OnError]", msg);
+        window.dispatchEvent(new CustomEvent("app-system-toast", {
+          detail: { message: msg }
+        }));
+        return true; // Handled
+      };
+
+      window.addEventListener('error', function(e) {
+        var msg = e.message || "";
+        if (typeof msg !== "string") {
+          msg = String(msg);
+        }
+        var msgLower = msg.toLowerCase();
+        if (!msg || msg.indexOf("websocket") > -1 || msg.indexOf("socket") > -1 || msgLower.indexOf("script error") > -1 || msgLower.indexOf("resizeobserver") > -1) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        console.warn("[Intercepted Global Error]", msg);
+        window.dispatchEvent(new CustomEvent("app-system-toast", {
+          detail: { message: msg }
+        }));
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }, true); // Use capture phase to intercept before other listeners
+
+      window.addEventListener('unhandledrejection', function(e) {
+        var reasonMsg = (e.reason && (e.reason.message || e.reason)) || "";
+        if (typeof reasonMsg !== 'string') {
+          try {
+            reasonMsg = JSON.stringify(reasonMsg) || "";
+          } catch(err) {
+            reasonMsg = "";
+          }
+        }
+        var msgLower = reasonMsg.toLowerCase();
+        if (!reasonMsg || reasonMsg.indexOf("websocket") > -1 || reasonMsg.indexOf("socket") > -1 || msgLower.indexOf("script error") > -1 || msgLower.indexOf("resizeobserver") > -1) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        console.warn("[Intercepted Promise Rejection]", reasonMsg);
+        window.dispatchEvent(new CustomEvent("app-system-toast", {
+          detail: { message: reasonMsg }
+        }));
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }, true); // Use capture phase to intercept before other listeners
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" crossorigin src="/src/main.tsx"></script>
+  </body>
+</html>
+
