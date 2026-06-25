@@ -1,12 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
+// AI 写作辅助 API（JavaScript 版本）
+const { GoogleGenAI } = require('@google/genai');
 
-const apiKey = process.env.GEMINI_API_KEY;
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
@@ -44,8 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const text = response.text?.trim() || "";
     return res.json({ text });
-  } catch (err: any) {
+  } catch (err) {
     console.error("AI Start Writing API Error:", err);
     return res.status(500).json({ error: 'Failed to generate text' });
   }
-}
+};

@@ -1,12 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
+// 情绪分析 API（JavaScript 版本）
+const { GoogleGenAI } = require('@google/genai');
 
-const apiKey = process.env.GEMINI_API_KEY;
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
@@ -49,8 +49,8 @@ ${text || "无内容"}
     
     const parsed = JSON.parse(text_response);
     return res.json(parsed);
-  } catch (err: any) {
+  } catch (err) {
     console.error("Analyze Emotion API Error:", err);
     return res.status(500).json({ error: 'Failed to analyze emotion' });
   }
-}
+};
