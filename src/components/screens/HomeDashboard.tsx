@@ -1039,16 +1039,22 @@ export default function HomeDashboard({
                     </>
                   )}
 
-                  <div className="relative z-10 flex flex-col items-center justify-center py-1">
-                    <span className={`text-[9px] font-bold tracking-widest uppercase leading-tight ${isSelected ? "text-[#1E3F39]/70 font-black" : "text-stone-400"}`}>
-                      {item.month}
-                    </span>
-                    <span className={`text-[21px] font-black font-display tracking-tight leading-[1] mt-1 ${isSelected ? "text-[#1E3F39] font-extrabold" : "text-[#4A5D58]"}`} style={{ fontFeatureSettings: "'tnum'" }}>
-                      {item.day}
-                    </span>
-                    <span className={`text-[8.5px] font-extrabold mt-1 uppercase tracking-wider leading-tight ${isSelected ? "text-[#1E3F39]/60" : "text-stone-500"}`}>
-                      {item.weekday}
-                    </span>
+                  <div className="relative z-10 w-full h-full flex flex-col items-center justify-center" style={{ gap: '2px' }}>
+                    <div className="flex items-center justify-center h-[14px]">
+                      <span className={`text-[9px] font-bold tracking-widest uppercase leading-none ${isSelected ? "text-[#1E3F39]/70 font-black" : "text-stone-400"}`}>
+                        {item.month}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center h-[28px]">
+                      <span className={`text-[21px] font-black font-display tracking-tight leading-none ${isSelected ? "text-[#1E3F39] font-extrabold" : "text-[#4A5D58]"}`} style={{ fontFeatureSettings: "'tnum'", fontVariantNumeric: 'tabular-nums' }}>
+                        {item.day}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center h-[12px]">
+                      <span className={`text-[8.5px] font-extrabold uppercase tracking-wider leading-none ${isSelected ? "text-[#1E3F39]/60" : "text-stone-500"}`}>
+                        {item.weekday}
+                      </span>
+                    </div>
                   </div>
                   {item.hasLeaf && (
                     <GlassIcon emoji="🌱" size="xs" className="scale-[0.5] origin-top-right absolute top-0.5 right-0.5 opacity-75" />
