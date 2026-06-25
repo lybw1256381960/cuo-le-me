@@ -1701,13 +1701,13 @@ export default function HomeDashboard({
                   <button
                     key={`day-cell-${day}`}
                     onClick={() => handleSelectFromCalendarModal(day)}
-                    className={`h-8 w-8 rounded-xl text-[11px] font-bold relative flex items-center justify-center transition-all ${
+                    className={`h-9 w-9 rounded-xl text-[11px] font-bold relative flex items-center justify-center transition-all ${
                       isCellSelected
                         ? "bg-[#C0E890] text-[#1E3F39] font-black scale-110 shadow-md ring-2 ring-emerald-600/20"
                         : "bg-white/60 hover:bg-emerald-50 text-stone-700 hover:scale-105 active:scale-95 border border-stone-250/10"
                     }`}
                   >
-                    <span>{day}</span>
+                    <span className="leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>{day}</span>
                     {isLeafy && (
                       <GlassIcon emoji="🌱" size="xs" className="scale-[0.45] origin-bottom-right absolute -bottom-1 -right-1" />
                     )}
