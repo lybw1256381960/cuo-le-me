@@ -1698,20 +1698,25 @@ export default function HomeDashboard({
                 const isLeafy = day % 6 === 0 || day % 7 === 2 || day === 8;
 
                 return (
-                  <button
-                    key={`day-cell-${day}`}
-                    onClick={() => handleSelectFromCalendarModal(day)}
-                    className={`h-9 w-9 rounded-xl text-[11px] font-bold relative flex items-center justify-center transition-all ${
-                      isCellSelected
-                        ? "bg-[#C0E890] text-[#1E3F39] font-black scale-110 shadow-md ring-2 ring-emerald-600/20"
-                        : "bg-white/60 hover:bg-emerald-50 text-stone-700 hover:scale-105 active:scale-95 border border-stone-250/10"
-                    }`}
-                  >
-                    <span className="leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>{day}</span>
+                  <div className="relative inline-flex items-center justify-center" style={{ width: '36px', height: '36px' }}>
+                    <button
+                      key={`day-cell-${day}`}
+                      onClick={() => handleSelectFromCalendarModal(day)}
+                      className={`w-full h-full rounded-xl text-[11px] font-bold flex items-center justify-center transition-all ${
+                        isCellSelected
+                          ? "bg-[#C0E890] text-[#1E3F39] font-black shadow-md ring-2 ring-emerald-600/20"
+                          : "bg-white/60 hover:bg-emerald-50 text-stone-700 hover:scale-105 active:scale-95 border border-stone-250/10"
+                      }`}
+                      style={{ fontVariantNumeric: 'tabular-nums' }}
+                    >
+                      <span className="leading-none">{day}</span>
+                    </button>
                     {isLeafy && (
-                      <GlassIcon emoji="🌱" size="xs" className="scale-[0.45] origin-bottom-right absolute -bottom-1 -right-1" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 flex items-center justify-center pointer-events-none">
+                        <GlassIcon emoji="🌱" size="xs" />
+                      </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
