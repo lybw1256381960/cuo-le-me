@@ -5,8 +5,8 @@ services:
   - type: web
     name: cuo-le-me-api
     env: node
-    buildCommand: npm install && npm run build-server
-    startCommand: node dist/server.cjs
+    buildCommand: npm install && npx esbuild server-render.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server-render.cjs
+    startCommand: node dist/server-render.cjs
     envVars:
       - key: NODE_ENV
         value: production
@@ -16,7 +16,7 @@ services:
         value: 10000
 
 # 说明：
-# - buildCommand: 构建命令（安装依赖 + 构建服务器）
+# - buildCommand: 构建命令（安装依赖 + 构建纯 API 服务器）
 # - startCommand: 启动命令（运行构建后的服务器）
 # - envVars: 环境变量（API Key 等）
 # - PORT: Render 会自动分配端口，这里设置为 10000（Render 会用环境变量覆盖）
