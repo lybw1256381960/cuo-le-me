@@ -12,11 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 // Enable CORS for Netlify frontend
 app.use(cors({
-  origin: [
-    "https://cuo-le-me.netlify.app",
-    "http://localhost:5173",
-    "http://localhost:3000"
-  ],
+  origin: true, // 允许所有域名（临时调试用）
   credentials: true
 }));
 
