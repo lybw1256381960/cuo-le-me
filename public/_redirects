@@ -1,0 +1,6 @@
+# Netlify Redirects 配置
+# 把 /api/* 请求重定向到 Netlify Functions
+/api/*  /.netlify/functions/:splat  200
+
+# SPA 路由支持（必须在最后）
+/*  /index.html  200
