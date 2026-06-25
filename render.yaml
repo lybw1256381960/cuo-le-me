@@ -1,0 +1,22 @@
+# Render 部署配置文件
+# 访问 https://render.com 导入此仓库时，Render 会自动读取此配置
+
+services:
+  - type: web
+    name: cuo-le-me-api
+    env: node
+    buildCommand: npm install && npm run build-server
+    startCommand: node dist/server.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        value: AIzaSyCK1YgdTv5fPEQSr2X_BngpwA7i_Fx40BA
+      - key: PORT
+        value: 10000
+
+# 说明：
+# - buildCommand: 构建命令（安装依赖 + 构建服务器）
+# - startCommand: 启动命令（运行构建后的服务器）
+# - envVars: 环境变量（API Key 等）
+# - PORT: Render 会自动分配端口，这里设置为 10000（Render 会用环境变量覆盖）

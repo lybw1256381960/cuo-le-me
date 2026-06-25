@@ -3,11 +3,22 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import cors from "cors";
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+// Enable CORS for Netlify frontend
+app.use(cors({
+  origin: [
+    "https://cuo-le-me.netlify.app",
+    "http://localhost:5173",
+    "http://localhost:3000"
+  ],
+  credentials: true
+}));
 
 app.use(express.json());
 
