@@ -1892,7 +1892,7 @@ export default function HomeDashboard({
                 <div className="flex items-center justify-between pb-3 border-b border-stone-100 pl-0.5">
                   <div className="flex items-center gap-2.5">
                     <img
-                      src="/public/images/shark_avatar.png" // User-provided image
+                      src="/images/shark_avatar.png" // User-provided image
                       alt="用户头像"
                       className="w-11 h-11 rounded-full border border-emerald-200/50 object-cover shadow-3xs"
                     />

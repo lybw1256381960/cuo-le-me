@@ -57,7 +57,7 @@ export default function SettingsPage({ user, onChangeUser, onRestoreMockData, on
           <div className="inline-block relative">
             {/* Using a placeholder image for avatar. User can replace this with a real image or upload functionality. */}
             <img
-              src="/public/images/shark_avatar.png" // User-provided image
+              src="/images/shark_avatar.png" // User-provided image
               alt="用户头像"
               className="w-16 h-16 rounded-full border border-stone-200 inline-block shadow-inner select-none object-cover"
             />
