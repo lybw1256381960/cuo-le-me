@@ -1039,14 +1039,14 @@ export default function HomeDashboard({
                     </>
                   )}
 
-                  <div className="relative z-10 flex flex-col items-center justify-center">
-                    <span className={`text-[9px] font-bold tracking-widest uppercase ${isSelected ? "text-[#1E3F39]/70 font-black" : "text-stone-400"}`}>
+                  <div className="relative z-10 flex flex-col items-center justify-center py-1">
+                    <span className={`text-[9px] font-bold tracking-widest uppercase leading-tight ${isSelected ? "text-[#1E3F39]/70 font-black" : "text-stone-400"}`}>
                       {item.month}
                     </span>
-                    <span className={`text-[21px] font-black font-display tracking-tight leading-none mt-1.5 ${isSelected ? "text-[#1E3F39] font-extrabold" : "text-[#4A5D58]"}`}>
+                    <span className={`text-[21px] font-black font-display tracking-tight leading-[1] mt-1 ${isSelected ? "text-[#1E3F39] font-extrabold" : "text-[#4A5D58]"}`} style={{ fontFeatureSettings: "'tnum'" }}>
                       {item.day}
                     </span>
-                    <span className={`text-[8.5px] font-extrabold mt-1.5 uppercase tracking-wider ${isSelected ? "text-[#1E3F39]/60" : "text-stone-500"}`}>
+                    <span className={`text-[8.5px] font-extrabold mt-1 uppercase tracking-wider leading-tight ${isSelected ? "text-[#1E3F39]/60" : "text-stone-500"}`}>
                       {item.weekday}
                     </span>
                   </div>
