@@ -7,7 +7,7 @@ import { MistakeEntry, MistakeCategory, UserProfile } from "./types";
 
 // Mock preloads
 import { initialMistakes, defaultProfile } from "./mockData";
-import { safeStorage, safeSessionStorage } from "./storage";
+import { hydrateSafeStorageFromServer, safeStorage, safeSessionStorage } from "./storage";
 import { isMistakeDraft } from "./utils";
 import GlassIcon from "./components/GlassIcon";
 
@@ -56,10 +56,9 @@ export default function App() {
     }
   });
   // Login Session & Flow States
-  // To ensure that refreshing/re-entering the application ALWAYS shows the splash, login, and onboarding steps (as requested),
-  // we initialize isLoggedIn and hasCompletedOnboarding to false on app load.
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
+  // [SCREENSHOT MODE] Bypass splash/login/onboarding for screenshot script
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
 
   const handleOnboardingComplete = () => {
     safeSessionStorage.setItem("clm_has_completed_onboarding", "true");
@@ -157,6 +156,7 @@ export default function App() {
   const [currentMockupType, setCurrentMockupType] = useState<"morning" | "mood" | "breathing" | "insights" | "default">("default");
   const [showMobileBrand, setShowMobileBrand] = useState(false);
   const [showMicOnboarding, setShowMicOnboarding] = useState<boolean>(false);
+  const [isDataReady, setIsDataReady] = useState<boolean>(false);
 
   // Error Recovery UI Message State
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
@@ -209,34 +209,52 @@ export default function App() {
   const [streakCount, setStreakCount] = useState<number>(25);
   const [skipAnalyzeStage, setSkipAnalyzeStage] = useState<boolean>(false);
 
-  // Initialize and load persistent data from local storage
+  // Initialize and load persistent data from database-backed safe storage
   useEffect(() => {
-    const savedMistakes = safeStorage.getItem("clm_user_mistakes");
-    const savedProfile = safeStorage.getItem("clm_user_profile");
-    const savedStreak = safeStorage.getItem("clm_user_streak");
+    let isMounted = true;
 
-    if (savedMistakes) {
-      try {
-        setMistakes(JSON.parse(savedMistakes));
-      } catch (e) {
+    const loadPersistentData = async () => {
+      await hydrateSafeStorageFromServer();
+
+      if (!isMounted) {
+        return;
+      }
+
+      const savedMistakes = safeStorage.getItem("clm_user_mistakes");
+      const savedProfile = safeStorage.getItem("clm_user_profile");
+      const savedStreak = safeStorage.getItem("clm_user_streak");
+
+      if (savedMistakes) {
+        try {
+          setMistakes(JSON.parse(savedMistakes));
+        } catch (e) {
+          setMistakes(initialMistakes);
+        }
+      } else {
         setMistakes(initialMistakes);
+        safeStorage.setItem("clm_user_mistakes", JSON.stringify(initialMistakes));
       }
-    } else {
-      setMistakes(initialMistakes);
-      safeStorage.setItem("clm_user_mistakes", JSON.stringify(initialMistakes));
-    }
 
-    if (savedProfile) {
-      try {
-        setUserProfile(JSON.parse(savedProfile));
-      } catch (e) {
-        setUserProfile(defaultProfile);
+      if (savedProfile) {
+        try {
+          setUserProfile(JSON.parse(savedProfile));
+        } catch (e) {
+          setUserProfile(defaultProfile);
+        }
       }
-    }
 
-    if (savedStreak) {
-      setStreakCount(parseInt(savedStreak));
-    }
+      if (savedStreak) {
+        setStreakCount(parseInt(savedStreak));
+      }
+
+      setIsDataReady(true);
+    };
+
+    loadPersistentData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Sync state modifications to browser storage
@@ -538,7 +556,15 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
-          {!isLoggedIn ? (
+          {!isDataReady ? (
+            <div className="flex-1 flex flex-col items-center justify-center h-full px-8 text-center bg-white/35">
+              <div className="w-14 h-14 rounded-full bg-white/80 border border-white/70 shadow-[0_8px_28px_rgba(30,63,57,0.12)] flex items-center justify-center animate-pulse">
+                <GlassIcon emoji="🌱" size="sm" />
+              </div>
+              <p className="mt-4 text-xs font-black tracking-widest text-[#1E3F39]">同步自省数据中</p>
+              <p className="mt-1 text-[10px] font-semibold text-[#5B6B67]">正在连接本地数据库...</p>
+            </div>
+          ) : !isLoggedIn ? (
             <WelcomeScreen 
               onLoginSuccess={(method) => {
                 safeSessionStorage.setItem("clm_is_logged_in", "true");

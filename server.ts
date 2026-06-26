@@ -4,11 +4,13 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import cors from "cors";
+import { registerAppStateRoutes } from "./server/appStateStore";
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 // Enable CORS for Netlify frontend
 app.use(cors({
@@ -16,7 +18,8 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
+registerAppStateRoutes(app);
 
 // Initialize Server-side Google GenAI client
 // User-Agent must be set to 'aistudio-build' for AI Studio's tracking telemetry.
@@ -104,7 +107,7 @@ app.post("/api/ai-start-writing", async (req, res) => {
 注意：不要输出任何多余解释，不要说教，只需输出这一句开头的句子（可以留有省略号或未完待续的感觉，方便他直接续写）。`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         maxOutputTokens: 100,
@@ -161,7 +164,7 @@ app.post("/api/analyze-speech", async (req, res) => {
 }`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -229,7 +232,7 @@ app.post("/api/analyze-emotion", async (req, res) => {
 }`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -371,7 +374,7 @@ app.post("/api/reflect", async (req, res) => {
 }`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -464,7 +467,7 @@ app.post("/api/generate-weekly-report", async (req, res) => {
 }`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         maxOutputTokens: 500,
@@ -532,7 +535,7 @@ app.post("/api/ai-refine-principle", async (req, res) => {
 }`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         maxOutputTokens: 200,
@@ -554,7 +557,12 @@ app.post("/api/ai-refine-principle", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === "true"
+          ? false
+          : { port: Number(process.env.VITE_HMR_PORT) || 24679 },
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);

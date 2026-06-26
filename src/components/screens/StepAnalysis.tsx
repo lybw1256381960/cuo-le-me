@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import GlassIcon from "../GlassIcon";
 import { MistakeCategory, MistakeEntry } from "../../types";
 import { getPainColorHSL } from "../../utils";
+import { API_BASE_URL } from "../../config/api";
 import { 
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, 
   AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, Cell, Legend
@@ -334,7 +335,7 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
   const handleStartWriting = async (type: string, currentVal: string, setVal: (v: string) => void) => {
     setAiOpeningLoading(type);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai-start-writing", {
+      const response = await fetch(`${API_BASE_URL}/api/ai-start-writing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contentType: type, rawInput: currentVal }),
@@ -934,7 +935,7 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
     setIsAnalyzing(true);
     setStep(7); // Jump to 5Why Analysis Panel
     try {
-      const response = await fetch(`${API_BASE_URL}/api/reflect", {
+      const response = await fetch(`${API_BASE_URL}/api/reflect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -980,7 +981,7 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
   const handleAIRefine = async () => {
     setIsRefiningPrinciple(true);
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/ai-refine-principle", {
+      const resp = await fetch(`${API_BASE_URL}/api/ai-refine-principle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2011,7 +2012,7 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
                           arr[whyStep - 1] = "思考中...";
                           setWhyAnswers(arr);
                           try {
-                            const resp = await fetch(`${API_BASE_URL}/api/ai-start-writing", {
+                            const resp = await fetch(`${API_BASE_URL}/api/ai-start-writing`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({ 

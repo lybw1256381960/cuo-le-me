@@ -5,18 +5,29 @@ services:
   - type: web
     name: cuo-le-me-api
     env: node
-    buildCommand: npm install && npx esbuild server-render.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server-render.cjs
-    startCommand: node dist/server-render.cjs
+    buildCommand: npm install && npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs
+    startCommand: node dist/server.cjs
+    healthCheckPath: /api/health
+    disk:
+      name: cuo-le-me-sqlite
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: GEMINI_API_KEY
-        value: AIzaSyCK1YgdTv5fPEQSr2X_BngpwA7i_Fx40BA
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: DATABASE_PATH
+        value: /var/data/app.sqlite
+      - key: NODE_VERSION
+        value: 24.16.0
       - key: PORT
         value: 10000
 
 # 说明：
-# - buildCommand: 构建命令（安装依赖 + 构建纯 API 服务器）
+# - buildCommand: 构建命令（安装依赖 + 构建完整 Express API 服务器）
 # - startCommand: 启动命令（运行构建后的服务器）
 # - envVars: 环境变量（API Key 等）
 # - PORT: Render 会自动分配端口，这里设置为 10000（Render 会用环境变量覆盖）

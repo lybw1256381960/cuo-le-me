@@ -22,5 +22,10 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "api_temp_backup",
+    "dist",
+    "node_modules"
+  ]
 }

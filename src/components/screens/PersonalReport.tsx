@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, TrendingDown, Share2, Compass, AlertCircle, CalendarRange, Star, Cpu, Sparkles, FileDown, Copy, Check, X, Award } from "lucide-react";
 import { safeStorage } from "../../storage";
 import { safeCopyToClipboard } from "../../utils";
+import { API_BASE_URL } from "../../config/api";
 import GlassIcon from "../GlassIcon";
 import {
   ResponsiveContainer,
@@ -296,7 +297,7 @@ export default function PersonalReport({ onBack, mistakes }: PersonalReportProps
     setShowAIReportModal(true);
     setAiReportData(null);
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/generate-weekly-report", {
+      const resp = await fetch(`${API_BASE_URL}/api/generate-weekly-report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cycle }),
