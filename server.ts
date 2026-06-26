@@ -470,6 +470,19 @@ app.post("/api/generate-weekly-report", async (req, res) => {
       model: GEMINI_MODEL,
       contents: prompt,
       config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            trendAnalysis: { type: Type.STRING },
+            keywords: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            advice: { type: Type.STRING },
+          },
+          required: ["trendAnalysis", "keywords", "advice"],
+        },
         maxOutputTokens: 500,
         temperature: 0.7,
       }
@@ -481,7 +494,7 @@ app.post("/api/generate-weekly-report", async (req, res) => {
     const parsed = JSON.parse(text);
     res.json({ ...parsed, isSimulated: false });
   } catch (err: any) {
-    console.warn("Gemini Weekly Report API - API quota limit or error. Fallback activated.");
+    console.warn("Gemini Weekly Report API - API quota limit or error. Fallback activated:", err);
     res.json({ ...getFallbackWeeklyReport(cycle), isSimulated: true });
   }
 });
@@ -538,6 +551,15 @@ app.post("/api/ai-refine-principle", async (req, res) => {
       model: GEMINI_MODEL,
       contents: prompt,
       config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            principle_text: { type: Type.STRING },
+          },
+          required: ["title", "principle_text"],
+        },
         maxOutputTokens: 200,
         temperature: 0.6,
       }
@@ -548,7 +570,7 @@ app.post("/api/ai-refine-principle", async (req, res) => {
     const parsed = JSON.parse(text);
     res.json({ ...parsed, isSimulated: false });
   } catch (err: any) {
-    console.warn("Gemini AI Refine Principle call warning - API quota limit or error. Fallback activated.");
+    console.warn("Gemini AI Refine Principle call warning - API quota limit or error. Fallback activated:", err);
     res.json({ ...getFallbackPrinciple(rawText, whyAnswers), isSimulated: true });
   }
 });
