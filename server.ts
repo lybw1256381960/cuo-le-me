@@ -91,6 +91,11 @@ const asStringArray = (value: unknown, maxItems = 6) => {
     .slice(0, maxItems);
 };
 
+const shouldSkipGeminiRetry = (error: any) => {
+  const message = `${error?.message || ""} ${JSON.stringify(error || {})}`;
+  return /RESOURCE_EXHAUSTED|quota|API_KEY_INVALID|api key not valid|PERMISSION_DENIED/i.test(message);
+};
+
 const chooseFallbackCategory = (rawText: string, explicitCategory?: string) => {
   if (explicitCategory) return explicitCategory;
   if (/拖延|截止|没做|来不及/.test(rawText)) return "习惯问题";
@@ -268,70 +273,91 @@ ${textAttachmentSummary ? `附件文本内容:\n${textAttachmentSummary}` : "如
   "safety_note": "一句温和提醒，说明AI只是辅助草稿"
 }`;
 
-    const response = await aiClient.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            polished_text: { type: Type.STRING },
-            event_summary: { type: Type.STRING },
-            background_draft: { type: Type.STRING },
-            category_suggestion: { type: Type.STRING },
-            pain_level: { type: Type.INTEGER },
-            body_signals: { type: Type.ARRAY, items: { type: Type.STRING } },
-            emotions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            pain_text: { type: Type.STRING },
-            emotion_text: { type: Type.STRING },
-            facts: { type: Type.ARRAY, items: { type: Type.STRING } },
-            direct_cause: { type: Type.STRING },
-            near_cause: { type: Type.STRING },
-            middle_cause: { type: Type.STRING },
-            distant_cause: { type: Type.STRING },
-            root_cause: { type: Type.STRING },
-            improvement_strategy: { type: Type.STRING },
-            principle_text: { type: Type.STRING },
-            next_action: { type: Type.STRING },
-            trigger_scene: { type: Type.STRING },
-            warning_signal: { type: Type.STRING },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            follow_up_questions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            safety_note: { type: Type.STRING },
-          },
-          required: [
-            "title",
-            "polished_text",
-            "event_summary",
-            "background_draft",
-            "category_suggestion",
-            "pain_level",
-            "body_signals",
-            "emotions",
-            "pain_text",
-            "emotion_text",
-            "facts",
-            "direct_cause",
-            "near_cause",
-            "middle_cause",
-            "distant_cause",
-            "root_cause",
-            "improvement_strategy",
-            "principle_text",
-            "next_action",
-            "trigger_scene",
-            "warning_signal",
-            "tags",
-            "follow_up_questions",
-            "safety_note",
-          ],
+    const structuredConfig = {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          polished_text: { type: Type.STRING },
+          event_summary: { type: Type.STRING },
+          background_draft: { type: Type.STRING },
+          category_suggestion: { type: Type.STRING },
+          pain_level: { type: Type.INTEGER },
+          body_signals: { type: Type.ARRAY, items: { type: Type.STRING } },
+          emotions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          pain_text: { type: Type.STRING },
+          emotion_text: { type: Type.STRING },
+          facts: { type: Type.ARRAY, items: { type: Type.STRING } },
+          direct_cause: { type: Type.STRING },
+          near_cause: { type: Type.STRING },
+          middle_cause: { type: Type.STRING },
+          distant_cause: { type: Type.STRING },
+          root_cause: { type: Type.STRING },
+          improvement_strategy: { type: Type.STRING },
+          principle_text: { type: Type.STRING },
+          next_action: { type: Type.STRING },
+          trigger_scene: { type: Type.STRING },
+          warning_signal: { type: Type.STRING },
+          tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+          follow_up_questions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          safety_note: { type: Type.STRING },
         },
-        maxOutputTokens: 1400,
-        temperature: 0.45,
+        required: [
+          "title",
+          "polished_text",
+          "event_summary",
+          "background_draft",
+          "category_suggestion",
+          "pain_level",
+          "body_signals",
+          "emotions",
+          "pain_text",
+          "emotion_text",
+          "facts",
+          "direct_cause",
+          "near_cause",
+          "middle_cause",
+          "distant_cause",
+          "root_cause",
+          "improvement_strategy",
+          "principle_text",
+          "next_action",
+          "trigger_scene",
+          "warning_signal",
+          "tags",
+          "follow_up_questions",
+          "safety_note",
+        ],
       },
-    });
+      maxOutputTokens: 2200,
+      temperature: 0.45,
+    };
+
+    const noteContents = imageParts.length > 0
+      ? [{ role: "user", parts: [{ text: prompt }, ...imageParts] }]
+      : prompt;
+
+    let response;
+    try {
+      response = await aiClient.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: noteContents,
+        config: structuredConfig,
+      });
+    } catch (firstErr: any) {
+      if (shouldSkipGeminiRetry(firstErr)) throw firstErr;
+      console.warn("Gemini AI note assist structured call failed, retrying plain JSON mode:", firstErr);
+      response = await aiClient.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: noteContents,
+        config: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 2200,
+          temperature: 0.35,
+        },
+      });
+    }
 
     const parsed = parseGeminiJsonObject(response.text || "");
     res.json({
@@ -346,7 +372,7 @@ ${textAttachmentSummary ? `附件文本内容:\n${textAttachmentSummary}` : "如
     });
   } catch (err: any) {
     console.warn("Gemini AI note assist warning - fallback activated:", err);
-    res.json({ ...fallback, isSimulated: true });
+    res.json({ ...fallback, isSimulated: true, fallbackReason: "gemini_unavailable_or_quota" });
   }
 });
 
