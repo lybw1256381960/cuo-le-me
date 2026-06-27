@@ -18,7 +18,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "8mb" }));
 registerAppStateRoutes(app);
 
 // Initialize Server-side Google GenAI client
@@ -63,9 +63,296 @@ function parseGeminiJsonObject(text: string) {
   }
 }
 
+type AiAssistAttachment = {
+  name?: string;
+  type?: string;
+  mimeType?: string;
+  size?: number;
+  text?: string;
+  data?: string;
+};
+
+const clampNumber = (value: unknown, min: number, max: number, fallback: number) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+};
+
+const asText = (value: unknown, maxLength = 4000) => {
+  if (value === null || value === undefined) return "";
+  return String(value).trim().slice(0, maxLength);
+};
+
+const asStringArray = (value: unknown, maxItems = 6) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => asText(item, 80))
+    .filter(Boolean)
+    .slice(0, maxItems);
+};
+
+const chooseFallbackCategory = (rawText: string, explicitCategory?: string) => {
+  if (explicitCategory) return explicitCategory;
+  if (/拖延|截止|没做|来不及/.test(rawText)) return "习惯问题";
+  if (/生气|焦虑|委屈|难过|失控|崩溃/.test(rawText)) return "情绪影响";
+  if (/沟通|会议|争执|表达|说话|客户|同学|老师/.test(rawText)) return "行动失误";
+  if (/目标|计划|复习|考试|任务/.test(rawText)) return "目标偏离";
+  return "其他";
+};
+
+const buildFallbackAssist = (payload: {
+  rawText?: string;
+  background?: string;
+  category?: string;
+  painLevel?: number;
+  bodySignals?: string[];
+  emotions?: string[];
+  attachments?: AiAssistAttachment[];
+}) => {
+  const rawText = asText(payload.rawText, 1200);
+  const attachmentNames = (payload.attachments || [])
+    .slice(0, 3)
+    .map((file) => asText(file.name, 80))
+    .filter(Boolean);
+  const sourceSummary = rawText || (attachmentNames.length ? `我上传了 ${attachmentNames.join("、")}，需要把它整理成一次可复盘的错题错事。` : "这是一条还没有写完整的快速记录。");
+  const category = chooseFallbackCategory(sourceSummary, payload.category);
+  const painLevel = clampNumber(payload.painLevel, 1, 7, 4);
+  const bodySignals = payload.bodySignals?.length ? payload.bodySignals : ["紧绷"];
+  const emotions = payload.emotions?.length ? payload.emotions : ["焦虑", "内疚"];
+
+  return {
+    title: sourceSummary.length > 14 ? sourceSummary.slice(0, 14) + "..." : "待整理错题",
+    polished_text: `客观记录：${sourceSummary}\n\n我先把这件事当作一个可复盘的样本，而不是对自己的定性评价。接下来需要补充当时背景、我的反应、造成后果以及下次可执行的修正动作。`,
+    event_summary: sourceSummary,
+    background_draft: payload.background || "这件事发生在一个需要我快速判断、表达或执行的场景里，当时的信息并不完全充分。",
+    category_suggestion: category,
+    pain_level: painLevel,
+    body_signals: bodySignals,
+    emotions,
+    pain_text: `痛感主要来自事情没有按预期发展，以及我对后果的担心。强度可暂定为 ${painLevel} 级，后续可按真实体感修改。`,
+    emotion_text: `这件事里最明显的感受是${emotions.join("、")}；先把这些情绪当作信号，而不是结论。`,
+    facts: [
+      sourceSummary,
+      attachmentNames.length ? `用户补充了附件：${attachmentNames.join("、")}` : "当前主要依据来自用户输入的文字或语音转写。",
+      "记录仍可继续补充时间、地点、人物、动作和结果。"
+    ],
+    direct_cause: "当时我在一个具体触发点上反应过快，先行动或先下判断，而没有把事实拆开确认。",
+    near_cause: "我把现场压力、他人反馈或任务难度快速理解成对自己的否定，于是进入防御或逃避状态。",
+    middle_cause: "事前没有准备足够清晰的检查清单、沟通边界或备用方案，导致临场只能靠情绪和惯性反应。",
+    distant_cause: "长期习惯用结果证明自我价值，对不确定性和被质疑的容忍度偏低。",
+    root_cause: "我需要把“事情没有做好”和“我这个人不够好”分开，先建立对事不对人的复盘边界。",
+    improvement_strategy: "以后遇到类似场景，先停三秒写下事实、影响、下一步，再决定是否回应或行动。",
+    principle_text: "下一次一旦感到急着证明自己，我先写下3个客观事实，再开口或动手。",
+    next_action: "在24小时内补写这件事的时间、地点、人物、我的动作和造成的影响各一句。",
+    trigger_scene: "下次遇到被质疑、被催促或事情突然失控并想立刻反应时",
+    warning_signal: "心跳变快、语速变快、肩颈紧绷、脑内急着辩解",
+    tags: [category, "AI草稿"],
+    follow_up_questions: [
+      "当时最客观发生的动作是什么？",
+      "如果只改一个最小动作，下次我会先做什么？",
+      "这件事真正暴露的是流程问题、准备问题，还是情绪触发问题？"
+    ],
+    safety_note: "这是AI辅助复盘草稿，不是诊断结论；用户可以按真实情况删改。"
+  };
+};
+
+app.post("/api/ai-assist-note", async (req, res) => {
+  const {
+    rawText,
+    background,
+    category,
+    painLevel,
+    bodySignals,
+    emotions,
+    painText,
+    emotionText,
+    recordMethod,
+    stage,
+    attachments,
+  } = req.body || {};
+
+  const cleanedAttachments: AiAssistAttachment[] = Array.isArray(attachments)
+    ? attachments.slice(0, 5).map((file: AiAssistAttachment) => ({
+      name: asText(file?.name, 120),
+      type: asText(file?.type || file?.mimeType, 80),
+      mimeType: asText(file?.mimeType || file?.type, 80),
+      size: Number(file?.size) || 0,
+      text: asText(file?.text, 8000),
+      data: typeof file?.data === "string" ? file.data : undefined,
+    }))
+    : [];
+
+  const fallback = buildFallbackAssist({
+    rawText,
+    background,
+    category,
+    painLevel,
+    bodySignals: asStringArray(bodySignals),
+    emotions: asStringArray(emotions),
+    attachments: cleanedAttachments,
+  });
+
+  if (!aiClient) {
+    res.json({ ...fallback, isSimulated: true });
+    return;
+  }
+
+  const textAttachmentSummary = cleanedAttachments
+    .filter((file) => file.text)
+    .map((file, index) => `附件${index + 1}《${file.name || "未命名"}》文本摘录：\n${file.text}`)
+    .join("\n\n");
+
+  const fileMetadataSummary = cleanedAttachments
+    .map((file, index) => `${index + 1}. ${file.name || "未命名"} (${file.mimeType || file.type || "未知类型"}${file.size ? `, ${file.size} bytes` : ""})`)
+    .join("\n");
+
+  const imageParts = cleanedAttachments
+    .filter((file) => file.data && (file.mimeType || file.type || "").startsWith("image/"))
+    .slice(0, 3)
+    .map((file) => ({
+      inlineData: {
+        mimeType: file.mimeType || file.type || "image/jpeg",
+        data: file.data,
+      },
+    }));
+
+  try {
+    const prompt = `你是“错了吗”软件里的AI复盘助手。用户会通过语音、拍照、相册或文件快速记录错题错事。你的任务不是替用户下结论，而是把零散输入整理成一份可编辑的高质量草稿，用户稍后会按真实情况修改。
+
+当前使用模块: ${asText(stage, 40) || "quick-note"}
+记录方式: ${asText(recordMethod, 40) || "未说明"}
+用户原始输入: "${asText(rawText, 3000)}"
+事件背景: "${asText(background, 1200) || "未填写"}"
+当前类别: "${asText(category, 60) || "未选择"}"
+痛感强度(1-7): ${clampNumber(painLevel, 1, 7, 4)}
+身体信号: "${asStringArray(bodySignals).join("、") || "未填写"}"
+情绪标签: "${asStringArray(emotions).join("、") || "未填写"}"
+痛感补充: "${asText(painText, 800) || "未填写"}"
+情绪补充: "${asText(emotionText, 800) || "未填写"}"
+附件列表:
+${fileMetadataSummary || "无附件"}
+
+${textAttachmentSummary ? `附件文本内容:\n${textAttachmentSummary}` : "如果有图片附件，请直接读取图片里的题目、截图、文字或场景线索。"}
+
+请完成：
+1. 如果图片中有题目、聊天、手写、白板、现场场景，请提取可用事实；不确定处用“可能/疑似”表达。
+2. 把用户输入润色成可编辑快记草稿，不要替用户编造关键事实。
+3. 输出剖析模块可以直接复用的5Why草案、改善对策和原则卡内容。
+4. 语气温和、清醒、非评判，所有建议必须能被用户修改。
+
+请返回严格JSON对象，不要Markdown代码块，字段必须完整：
+{
+  "title": "5到15字标题",
+  "polished_text": "可直接放入快记文本框的润色草稿，保留用户原意，不超过350字",
+  "event_summary": "一句话概括发生了什么",
+  "background_draft": "可填入背景输入框的上下文草稿",
+  "category_suggestion": "目标偏离/行动失误/习惯问题/情绪影响/外部因素/其他 之一",
+  "pain_level": 1,
+  "body_signals": ["身体信号1", "身体信号2"],
+  "emotions": ["情绪1", "情绪2"],
+  "pain_text": "痛感描述草稿",
+  "emotion_text": "情绪描述草稿",
+  "facts": ["客观事实1", "客观事实2", "客观事实3"],
+  "direct_cause": "5Why第一层直接原因",
+  "near_cause": "5Why第二层近因",
+  "middle_cause": "5Why第三层中间原因",
+  "distant_cause": "5Why第四层远因",
+  "root_cause": "5Why第五层根本原因",
+  "improvement_strategy": "改善对策",
+  "principle_text": "下一次一旦遇到X，我先做Y",
+  "next_action": "24小时内的具体小动作",
+  "trigger_scene": "原则卡触发场景",
+  "warning_signal": "复发前身体/情绪预警",
+  "tags": ["标签1", "标签2"],
+  "follow_up_questions": ["建议用户补充的问题1", "问题2", "问题3"],
+  "safety_note": "一句温和提醒，说明AI只是辅助草稿"
+}`;
+
+    const response = await aiClient.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            polished_text: { type: Type.STRING },
+            event_summary: { type: Type.STRING },
+            background_draft: { type: Type.STRING },
+            category_suggestion: { type: Type.STRING },
+            pain_level: { type: Type.INTEGER },
+            body_signals: { type: Type.ARRAY, items: { type: Type.STRING } },
+            emotions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            pain_text: { type: Type.STRING },
+            emotion_text: { type: Type.STRING },
+            facts: { type: Type.ARRAY, items: { type: Type.STRING } },
+            direct_cause: { type: Type.STRING },
+            near_cause: { type: Type.STRING },
+            middle_cause: { type: Type.STRING },
+            distant_cause: { type: Type.STRING },
+            root_cause: { type: Type.STRING },
+            improvement_strategy: { type: Type.STRING },
+            principle_text: { type: Type.STRING },
+            next_action: { type: Type.STRING },
+            trigger_scene: { type: Type.STRING },
+            warning_signal: { type: Type.STRING },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            follow_up_questions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            safety_note: { type: Type.STRING },
+          },
+          required: [
+            "title",
+            "polished_text",
+            "event_summary",
+            "background_draft",
+            "category_suggestion",
+            "pain_level",
+            "body_signals",
+            "emotions",
+            "pain_text",
+            "emotion_text",
+            "facts",
+            "direct_cause",
+            "near_cause",
+            "middle_cause",
+            "distant_cause",
+            "root_cause",
+            "improvement_strategy",
+            "principle_text",
+            "next_action",
+            "trigger_scene",
+            "warning_signal",
+            "tags",
+            "follow_up_questions",
+            "safety_note",
+          ],
+        },
+        maxOutputTokens: 1400,
+        temperature: 0.45,
+      },
+    });
+
+    const parsed = parseGeminiJsonObject(response.text || "");
+    res.json({
+      ...fallback,
+      ...parsed,
+      pain_level: clampNumber(parsed.pain_level, 1, 7, fallback.pain_level),
+      body_signals: asStringArray(parsed.body_signals, 6).length ? asStringArray(parsed.body_signals, 6) : fallback.body_signals,
+      emotions: asStringArray(parsed.emotions, 6).length ? asStringArray(parsed.emotions, 6) : fallback.emotions,
+      tags: asStringArray(parsed.tags, 6).length ? asStringArray(parsed.tags, 6) : fallback.tags,
+      follow_up_questions: asStringArray(parsed.follow_up_questions, 4).length ? asStringArray(parsed.follow_up_questions, 4) : fallback.follow_up_questions,
+      isSimulated: false,
+    });
+  } catch (err: any) {
+    console.warn("Gemini AI note assist warning - fallback activated:", err);
+    res.json({ ...fallback, isSimulated: true });
+  }
+});
+
 // REST API endpoint: AI starts writing response proxy (AI 帮我开头)
 app.post("/api/ai-start-writing", async (req, res) => {
-  const { contentType, rawInput } = req.body;
+  const { contentType, rawInput, eventText, background, currentWhys } = req.body;
   
   const contentMap: Record<string, string> = {
     what: "当时发生了什么？只记录客观事实，比如：在当天的会上面，当讨论到技术方案的时候...",
@@ -120,10 +407,17 @@ app.post("/api/ai-start-writing", async (req, res) => {
   }
 
   try {
+    const whyContext = Array.isArray(currentWhys) && currentWhys.length
+      ? `\n已经写过的5Why前置层级：\n${currentWhys.map((why: string, index: number) => `${index + 1}. ${asText(why, 300)}`).join("\n")}`
+      : "";
+
+    const isWhyStep = String(contentType || "").startsWith("why_");
     const prompt = `你是一个朋友般、理性的人生复盘陪伴者。用户正在使用错题本记录自己的犯错。
 此时他面临输入框“${placeholder}”，感到难以下笔。
 用户当前的输入草稿是：“${rawInput || ""}”。
-请你写一句适合作为开头的话（不超过40字），启发他继续往下写。
+事件主线：“${eventText || rawInput || ""}”
+事件背景：“${background || "未提供"}”${whyContext}
+请你写${isWhyStep ? "一段适合作为当前5Why层级的原因草稿（不超过70字）" : "一句适合作为开头的话（不超过40字）"}，启发他继续往下写。
 注意：不要输出任何多余解释，不要说教，只需输出这一句开头的句子（可以留有省略号或未完待续的感觉，方便他直接续写）。`;
 
     const response = await aiClient.models.generateContent({

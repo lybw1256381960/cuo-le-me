@@ -29,6 +29,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { MistakeCategory, MistakeEntry } from "../../types";
 import { getPainColorHSL } from "../../utils";
 import { API_BASE_URL } from "../../config/api";
+import { AiAssistResult, UiAttachment, requestAiNoteAssist } from "../../aiAssist";
 
 interface QuickNoteProps {
   initialDraft?: MistakeEntry | null;
@@ -42,7 +43,7 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
   const [recordMethod, setRecordMethod] = useState<string>(defaultMethod || "文本记录");
   const [content, setContent] = useState<string>(initialDraft ? initialDraft.rawText : "");
   const [aiLoading, setAiLoading] = useState<boolean>(false);
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; url: string; type: string; file: File }[]>(initialDraft?.attachments || []);
+  const [attachedFiles, setAttachedFiles] = useState<UiAttachment[]>(initialDraft?.attachments || []);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const albumInputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +56,9 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
   const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
   const [emotionAnalysis, setEmotionAnalysis] = useState<any>(null);
   const [isAnalyzingEmotion, setIsAnalyzingEmotion] = useState<boolean>(false);
+  const [aiAssistDraft, setAiAssistDraft] = useState<AiAssistResult | null>(null);
+  const [isAiAssistLoading, setIsAiAssistLoading] = useState<boolean>(false);
+  const [aiAssistError, setAiAssistError] = useState<string>("");
 
   const recordMethods = [
     { name: "文本记录", description: "输入想法和感受", icon: PenTool, activeColor: "text-emerald-600 bg-emerald-50 border-emerald-300" },
@@ -255,6 +259,71 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
     }
   };
 
+  const mergeUnique = (base: string[], additions: string[] = []) => {
+    const merged = [...base];
+    additions.forEach((item) => {
+      const clean = item?.trim();
+      if (clean && !merged.includes(clean)) merged.push(clean);
+    });
+    return merged;
+  };
+
+  const applyAiAssistDraft = (data: AiAssistResult) => {
+    if (data.polished_text) {
+      setContent(data.polished_text);
+    }
+
+    if (data.pain_level) {
+      setPainValue(Math.min(7, Math.max(1, Math.round(data.pain_level))));
+    }
+
+    const knownCategoryNames = new Set(categories.map((item) => item.name));
+    const categorySuggestion = data.category_suggestion && knownCategoryNames.has(data.category_suggestion)
+      ? [data.category_suggestion]
+      : [];
+    setSelectedTypes((prev) => mergeUnique(prev, [...categorySuggestion, ...(data.emotions || []).slice(0, 2)]));
+
+    const knownBodyNames = new Set(bodyFeelings.map((item) => item.name));
+    const matchedBodySignals = (data.body_signals || []).filter((signal) => knownBodyNames.has(signal));
+    setBodyExperiences((prev) => mergeUnique(prev, matchedBodySignals));
+
+    setEmotionAnalysis({
+      emotionCategory: data.emotions?.join(" / ") || data.category_suggestion || "AI结构化觉察",
+      intensity: data.pain_level,
+      emotionalKeywords: mergeUnique(data.body_signals || [], data.emotions || []).slice(0, 6),
+      cognitiveTag: data.tags?.[0] || "AI快记整理",
+      highEndEvaluation: [
+        data.emotion_text,
+        data.safety_note,
+        data.follow_up_questions?.length ? `待补充：${data.follow_up_questions.join(" / ")}` : ""
+      ].filter(Boolean).join("\n\n"),
+    });
+  };
+
+  const handleAIAssistDraft = async () => {
+    if (!content.trim() && attachedFiles.length === 0) return;
+    setIsAiAssistLoading(true);
+    setAiAssistError("");
+    try {
+      const data = await requestAiNoteAssist({
+        stage: "quick-note",
+        recordMethod,
+        rawText: content,
+        painLevel: painValue,
+        bodySignals: bodyExperiences,
+        emotions: selectedTypes,
+        attachments: attachedFiles,
+      });
+      setAiAssistDraft(data);
+      applyAiAssistDraft(data);
+    } catch (err) {
+      console.error("AI note assist failed:", err);
+      setAiAssistError("AI 草稿生成失败，请稍后再试。");
+    } finally {
+      setIsAiAssistLoading(false);
+    }
+  };
+
   const handlePublish = (startReview: boolean, skipToReflection: boolean = false, isSavingAsDraft: boolean = false) => {
     let cat = MistakeCategory.OTHER;
     if (selectedTypes.includes("行动失误")) cat = MistakeCategory.HABIT;
@@ -281,12 +350,27 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
 
     const draft: Partial<MistakeEntry> = {
       rawText: content || "快捷录入事实",
+      background: aiAssistDraft?.background_draft || initialDraft?.background,
       category: cat,
       painLevel: emotionAnalysis?.intensity || painValue,
       bodySignals: finalBodySignals,
       emotions: finalEmotions,
-      eventSummary: content,
-      facts: [content],
+      painText: aiAssistDraft?.pain_text || initialDraft?.painText,
+      emotionText: aiAssistDraft?.emotion_text || initialDraft?.emotionText,
+      title: aiAssistDraft?.title || initialDraft?.title,
+      eventSummary: aiAssistDraft?.event_summary || content,
+      facts: aiAssistDraft?.facts || [content],
+      directCause: aiAssistDraft?.direct_cause || initialDraft?.directCause,
+      nearCause: aiAssistDraft?.near_cause || initialDraft?.nearCause,
+      middleCause: aiAssistDraft?.middle_cause || initialDraft?.middleCause,
+      distantCause: aiAssistDraft?.distant_cause || initialDraft?.distantCause,
+      rootCause: aiAssistDraft?.root_cause || initialDraft?.rootCause,
+      improvementStrategy: aiAssistDraft?.improvement_strategy || initialDraft?.improvementStrategy,
+      principleText: aiAssistDraft?.principle_text || initialDraft?.principleText,
+      nextAction: aiAssistDraft?.next_action || initialDraft?.nextAction,
+      triggerScene: aiAssistDraft?.trigger_scene || initialDraft?.triggerScene,
+      warningSignal: aiAssistDraft?.warning_signal || initialDraft?.warningSignal,
+      tags: aiAssistDraft?.tags || initialDraft?.tags,
       status: "待反思",
       isDraft: isSavingAsDraft,
       attachments: attachedFiles // Add attached files
@@ -645,20 +729,94 @@ export default function QuickNote({ initialDraft, defaultMethod, onSaveQuick, on
           )}
 
           {/* Section Leaf note bar */}
-          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#5E7F73]/5 border border-[#5E7F73]/10 text-[10.5px] text-[#426156] font-bold">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-[#5E7F73]/5 border border-[#5E7F73]/10 text-[10.5px] text-[#426156] font-bold">
+            <div className="flex items-center gap-1 min-w-0">
               <GlassIcon emoji="🌱" size="xs" />
-              <span>写下你的真实想法，哪怕只是几个字，也有意义</span>
+              <span className="truncate">写下你的真实想法，哪怕只是几个字，也有意义</span>
             </div>
             
-            <button
-              onClick={handleAISuggestion}
-              disabled={aiLoading}
-              className="px-2.5 py-1 rounded-full bg-white text-[#426156] hover:bg-[#F3FAF7] hover:scale-102 border border-stone-200 text-[10px] flex items-center gap-0.5 shadow-2xs font-extrabold cursor-pointer active:scale-95 transition-all"
-            >
-              <span>✦ AI 帮我开头</span>
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={handleAISuggestion}
+                disabled={aiLoading}
+                className="px-2.5 py-1 rounded-full bg-white text-[#426156] hover:bg-[#F3FAF7] hover:scale-102 border border-stone-200 text-[10px] flex items-center gap-0.5 shadow-2xs font-extrabold cursor-pointer active:scale-95 transition-all disabled:opacity-60"
+              >
+                <span>{aiLoading ? "开头中..." : "✦ AI 开头"}</span>
+              </button>
+              <button
+                onClick={handleAIAssistDraft}
+                disabled={isAiAssistLoading || (!content.trim() && attachedFiles.length === 0)}
+                className="px-2.5 py-1 rounded-full bg-[#1E3F39] text-white hover:bg-[#17342F] hover:scale-102 border border-[#1E3F39]/20 text-[10px] flex items-center gap-1 shadow-2xs font-extrabold cursor-pointer active:scale-95 transition-all disabled:opacity-45 disabled:pointer-events-none"
+              >
+                <Sparkles className={`w-3 h-3 ${isAiAssistLoading ? "animate-spin" : ""}`} />
+                <span>{isAiAssistLoading ? "整理中..." : "AI 整理"}</span>
+              </button>
+            </div>
           </div>
+
+          {(isAiAssistLoading || aiAssistDraft || aiAssistError) && (
+            <div className="p-4 rounded-2xl bg-white/75 backdrop-blur-md border border-emerald-100/80 shadow-2xs space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[#1E3F39]">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span className="text-[12px] font-black">AI 草稿参考</span>
+                </div>
+                {aiAssistDraft && (
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-black border ${
+                    aiAssistDraft.isSimulated
+                      ? "bg-amber-50 text-amber-700 border-amber-100"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                  }`}>
+                    {aiAssistDraft.isSimulated ? "本地兜底" : "Gemini生成"}
+                  </span>
+                )}
+              </div>
+
+              {isAiAssistLoading ? (
+                <div className="space-y-2 py-1">
+                  <div className="h-3.5 bg-emerald-100/70 rounded-full w-3/4 animate-pulse" />
+                  <div className="h-3 bg-stone-100 rounded-full w-full animate-pulse" />
+                  <div className="h-3 bg-stone-100 rounded-full w-5/6 animate-pulse" />
+                </div>
+              ) : aiAssistError ? (
+                <p className="text-[11px] text-rose-600 font-bold leading-relaxed">{aiAssistError}</p>
+              ) : aiAssistDraft ? (
+                <div className="space-y-2.5">
+                  <div>
+                    <h4 className="text-[13px] font-black text-stone-900">{aiAssistDraft.title || "AI整理草稿"}</h4>
+                    <p className="text-[11px] text-stone-600 font-semibold leading-relaxed mt-1 whitespace-pre-line">
+                      {aiAssistDraft.event_summary || aiAssistDraft.polished_text}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 p-2.5">
+                      <span className="text-[9px] font-black text-emerald-700">根因草案</span>
+                      <p className="text-[10.5px] text-stone-700 font-bold leading-relaxed mt-1 line-clamp-3">
+                        {aiAssistDraft.root_cause || "待补充根本原因"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-sky-50/80 border border-sky-100 p-2.5">
+                      <span className="text-[9px] font-black text-sky-700">下一步</span>
+                      <p className="text-[10.5px] text-stone-700 font-bold leading-relaxed mt-1 line-clamp-3">
+                        {aiAssistDraft.next_action || "补充一个24小时内的小动作"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {aiAssistDraft.follow_up_questions && aiAssistDraft.follow_up_questions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {aiAssistDraft.follow_up_questions.slice(0, 3).map((question, index) => (
+                        <span key={index} className="text-[9.5px] bg-stone-50 border border-stone-100 text-stone-600 font-bold px-2 py-0.5 rounded-full">
+                          {question}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
 
         {/* ================= SECTION 2: 这件事更像是哪种类型？ ================= */}

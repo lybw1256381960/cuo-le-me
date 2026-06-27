@@ -60,4 +60,23 @@ After deployment, verify:
 Then test an AI endpoint:
 
 `curl -X POST https://cuo-le-me.netlify.app/api/ai-start-writing -H "Content-Type: application/json" -d '{"contentType":"what","rawInput":"部署检测"}'`
+
+## AI Interaction Flow
+
+Quick note, analysis, and 5Why review now share one backend AI draft endpoint:
+
+`POST /api/ai-assist-note`
+
+The frontend sends the user's text, voice transcript, pain/emotion selections, and uploaded attachment context. Image attachments are compressed in the browser and sent as Gemini `inlineData`; text-like files are sent as short text excerpts; other files are sent as metadata.
+
+The backend calls Gemini with `GEMINI_API_KEY` and returns an editable draft containing:
+
+- quick-note polished text
+- emotion and body-signal suggestions
+- objective facts
+- 5Why draft causes
+- improvement strategy
+- principle-card trigger, warning signal, and next action
+
+If Gemini is unavailable, times out, or quota is exhausted, the API returns the same JSON shape with `isSimulated: true`, so the app still works and the user can keep editing.
 # Deployment trigger Thu Jun 25 18:18:32 CST 2026

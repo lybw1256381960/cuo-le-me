@@ -9,6 +9,7 @@ import GlassIcon from "../GlassIcon";
 import { MistakeCategory, MistakeEntry } from "../../types";
 import { getPainColorHSL } from "../../utils";
 import { API_BASE_URL } from "../../config/api";
+import { UiAttachment, requestAiNoteAssist } from "../../aiAssist";
 import { 
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, 
   AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, Cell, Legend
@@ -20,6 +21,34 @@ interface StepAnalysisProps {
   onSave: (entry: MistakeEntry) => void;
   onClose: () => void;
 }
+
+const buildAnalysisResultFromMistake = (mistake: MistakeEntry | null) => {
+  if (!mistake) return null;
+  const hasAiDraft = Boolean(
+    mistake.eventSummary ||
+    mistake.directCause ||
+    mistake.rootCause ||
+    mistake.improvementStrategy ||
+    mistake.principleText
+  );
+  if (!hasAiDraft) return null;
+
+  return {
+    title: mistake.title,
+    event_summary: mistake.eventSummary || mistake.rawText,
+    facts: mistake.facts || [mistake.rawText],
+    emotions: mistake.emotions,
+    direct_cause: mistake.directCause,
+    near_cause: mistake.nearCause,
+    middle_cause: mistake.middleCause,
+    distant_cause: mistake.distantCause,
+    root_cause: mistake.rootCause,
+    improvement_strategy: mistake.improvementStrategy,
+    principle_text: mistake.principleText,
+    next_action: mistake.nextAction,
+    tags: mistake.tags,
+  };
+};
 
 export default function StepAnalysis({ currentMistake, initialStep, onSave, onClose }: StepAnalysisProps) {
   // Click wave ripples effect state
@@ -62,20 +91,26 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
   const [rawText, setRawText] = useState(currentMistake?.rawText || "");
   const [background, setBackground] = useState(currentMistake?.background || "");
   const [painLevel, setPainLevel] = useState<number>(currentMistake?.painLevel || 4);
-  const [painText, setPainText] = useState("");
+  const [painText, setPainText] = useState(currentMistake?.painText || "");
   const [bodySignals, setBodySignals] = useState<string[]>(currentMistake?.bodySignals || []);
   const [bodyText, setBodyText] = useState("");
   const [emotions, setEmotions] = useState<string[]>(currentMistake?.emotions || []);
-  const [emotionText, setEmotionText] = useState("");
-  const [retryText, setRetryText] = useState("");
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; url: string; type: string; file: File }[]>(currentMistake?.attachments || []);
+  const [emotionText, setEmotionText] = useState(currentMistake?.emotionText || "");
+  const [retryText, setRetryText] = useState(currentMistake?.nextAction || "");
+  const [attachedFiles, setAttachedFiles] = useState<UiAttachment[]>(currentMistake?.attachments || []);
 
   // Loading/AI result states
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisResult, setAnalysisResult] = useState<any>(() => buildAnalysisResultFromMistake(currentMistake));
 
   // 5Why answers (allows user editing layer by layer as in Screenshot 3)
-  const [whyAnswers, setWhyAnswers] = useState<string[]>(["", "", "", "", ""]);
+  const [whyAnswers, setWhyAnswers] = useState<string[]>(() => [
+    currentMistake?.directCause || "",
+    currentMistake?.nearCause || "",
+    currentMistake?.middleCause || "",
+    currentMistake?.distantCause || "",
+    currentMistake?.rootCause || "",
+  ]);
   const [whyStep, setWhyStep] = useState<number>(1);
 
   // AI opening helpers loading state
@@ -83,9 +118,9 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
   const [isRefiningPrinciple, setIsRefiningPrinciple] = useState<boolean>(false);
 
   // New Principle Card custom inputs for absolute 1:1 matching of Screenshot 2
-  const [triggerSceneInput, setTriggerSceneInput] = useState("技术方案汇报受到质疑，大声切入讨论并感到心跳加快时");
-  const [warningSignalInput, setWarningSignalInput] = useState("心跳加快、语速变快、忍不住想要进行反击和口头强突辩解");
-  const [nextActionInput, setNextActionInput] = useState("在接下来的24h内，在工作台或显示器右侧贴上『先倾听，记要点，再结论』的便利贴提示");
+  const [triggerSceneInput, setTriggerSceneInput] = useState(currentMistake?.triggerScene || "技术方案汇报受到质疑，大声切入讨论并感到心跳加快时");
+  const [warningSignalInput, setWarningSignalInput] = useState(currentMistake?.warningSignal || "心跳加快、语速变快、忍不住想要进行反击和口头强突辩解");
+  const [nextActionInput, setNextActionInput] = useState(currentMistake?.nextAction || "在接下来的24h内，在工作台或显示器右侧贴上『先倾听，记要点，再结论』的便利贴提示");
   const [reminderTimeInput, setReminderTimeInput] = useState("20:00");
   const [reminderDateInput, setReminderDateInput] = useState("2026-06-12 (周五)");
 
@@ -94,7 +129,7 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
   const [listeningStep, setListeningStep] = useState<number | null>(null);
 
   // New Principle Card Tags State
-  const [principleTags, setPrincipleTags] = useState<string[]>([]);
+  const [principleTags, setPrincipleTags] = useState<string[]>(currentMistake?.tags || []);
   const hasInitializedTagsRef = useRef(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -338,7 +373,13 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
       const response = await fetch(`${API_BASE_URL}/api/ai-start-writing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentType: type, rawInput: currentVal }),
+        body: JSON.stringify({
+          contentType: type,
+          rawInput: currentVal,
+          eventText: rawText,
+          background,
+          currentWhys: whyAnswers.filter(Boolean),
+        }),
       });
       const data = await response.json();
       if (data.text) {
@@ -935,21 +976,18 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
     setIsAnalyzing(true);
     setStep(7); // Jump to 5Why Analysis Panel
     try {
-      const response = await fetch(`${API_BASE_URL}/api/reflect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rawText,
-          background,
-          category,
-          painLevel,
-          bodySignals,
-          emotions,
-          emotionText,
-          painText,
-        }),
+      const data = await requestAiNoteAssist({
+        stage: "analysis",
+        rawText,
+        background,
+        category,
+        painLevel,
+        bodySignals,
+        emotions,
+        emotionText,
+        painText,
+        attachments: attachedFiles,
       });
-      const data = await response.json();
       setAnalysisResult(data);
       // Pre-fill user edit state with AI values for the 5Why questionnaire
       setWhyAnswers([
@@ -962,8 +1000,17 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
       if (data.next_action) {
         setNextActionInput(data.next_action);
       }
+      if (data.trigger_scene) {
+        setTriggerSceneInput(data.trigger_scene);
+      }
+      if (data.warning_signal) {
+        setWarningSignalInput(data.warning_signal);
+      }
       if (data.tags && data.tags.length > 0) {
-        setTriggerSceneInput(`下次遇到 ${data.tags.join("、")} 等类似高频触发场景并感到防卫性急躁时`);
+        setPrincipleTags(data.tags);
+        if (!data.trigger_scene) {
+          setTriggerSceneInput(`下次遇到 ${data.tags.join("、")} 等类似高频触发场景并感到防卫性急躁时`);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -974,6 +1021,10 @@ export default function StepAnalysis({ currentMistake, initialStep, onSave, onCl
 
   React.useEffect(() => {
     if (initialStep === 7) {
+      if (analysisResult?.direct_cause || whyAnswers.some(Boolean)) {
+        setStep(7);
+        return;
+      }
       triggerAIReflect();
     }
   }, [initialStep]);
