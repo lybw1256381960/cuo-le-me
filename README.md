@@ -49,7 +49,7 @@ Netlify uses `netlify.toml` to proxy `/api/*` to the Render backend:
 Render uses `render.yaml` and needs these environment variables:
 
 - `GEMINI_API_KEY`: set in the Render dashboard, never commit it.
-- `GEMINI_MODEL`: defaults to `gemini-2.5-flash`.
+- `GEMINI_MODEL`: defaults to `gemini-2.5-flash-lite`.
 - `DATABASE_PATH`: `/var/data/app.sqlite`.
 - `NODE_VERSION`: `24.16.0`.
 

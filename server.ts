@@ -10,7 +10,7 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 // Enable CORS for Netlify frontend
 app.use(cors({
@@ -41,6 +41,26 @@ if (apiKey && apiKey !== "MY_GEMINI_API_KEY") {
   }
 } else {
   console.log("No valid GEMINI_API_KEY found, running with dynamic fallback generator");
+}
+
+function parseGeminiJsonObject(text: string) {
+  const cleaned = (text || "")
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error(`Gemini response was not JSON: ${cleaned.slice(0, 160)}`);
+  }
 }
 
 // REST API endpoint: AI starts writing response proxy (AI 帮我开头)
@@ -488,10 +508,7 @@ app.post("/api/generate-weekly-report", async (req, res) => {
       }
     });
 
-    let text = response.text?.trim() || "";
-    // Clean code block markers
-    text = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const parsed = JSON.parse(text);
+    const parsed = parseGeminiJsonObject(response.text || "");
     res.json({ ...parsed, isSimulated: false });
   } catch (err: any) {
     console.warn("Gemini Weekly Report API - API quota limit or error. Fallback activated:", err);
@@ -565,9 +582,7 @@ app.post("/api/ai-refine-principle", async (req, res) => {
       }
     });
 
-    let text = response.text?.trim() || "";
-    text = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const parsed = JSON.parse(text);
+    const parsed = parseGeminiJsonObject(response.text || "");
     res.json({ ...parsed, isSimulated: false });
   } catch (err: any) {
     console.warn("Gemini AI Refine Principle call warning - API quota limit or error. Fallback activated:", err);
