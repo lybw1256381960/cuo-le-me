@@ -141,6 +141,60 @@ async function buildAttachmentPayload(attachments: UiAttachment[] = []) {
   return payload;
 }
 
+async function requestLegacyReflectAssist(payload: AiAssistPayload): Promise<AiAssistResult> {
+  const response = await fetch(`${API_BASE_URL}/api/reflect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      rawText: payload.rawText,
+      background: payload.background,
+      category: payload.category,
+      painLevel: payload.painLevel,
+      bodySignals: payload.bodySignals,
+      emotions: payload.emotions,
+      painText: payload.painText,
+      emotionText: payload.emotionText,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI剖析兜底失败: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return {
+    title: data.title,
+    polished_text: payload.rawText || data.event_summary,
+    event_summary: data.event_summary,
+    background_draft: payload.background,
+    category_suggestion: String(payload.category || ""),
+    pain_level: payload.painLevel,
+    body_signals: payload.bodySignals,
+    emotions: data.emotions || payload.emotions,
+    pain_text: payload.painText,
+    emotion_text: payload.emotionText,
+    facts: data.facts,
+    direct_cause: data.direct_cause,
+    near_cause: data.near_cause,
+    middle_cause: data.middle_cause,
+    distant_cause: data.distant_cause,
+    root_cause: data.root_cause,
+    improvement_strategy: data.improvement_strategy,
+    principle_text: data.principle_text,
+    next_action: data.next_action,
+    trigger_scene: data.tags?.length ? `下次遇到 ${data.tags.join("、")} 等类似场景时` : undefined,
+    warning_signal: "心跳变快、语速变快、想立即辩解或逃避",
+    tags: data.tags,
+    follow_up_questions: [
+      "这条草稿里还有哪个事实需要补充？",
+      "下次遇到同类场景，我能先做哪一个小动作？",
+      "根本原因是否真的能被我改变？"
+    ],
+    safety_note: data.safety_note || "这是兼容旧后端生成的AI草稿，可继续修改。",
+    isSimulated: data.isSimulated,
+  };
+}
+
 export async function requestAiNoteAssist(payload: AiAssistPayload): Promise<AiAssistResult> {
   const attachmentPayload = await buildAttachmentPayload(payload.attachments);
   const response = await fetch(`${API_BASE_URL}/api/ai-assist-note`, {
@@ -162,6 +216,9 @@ export async function requestAiNoteAssist(payload: AiAssistPayload): Promise<AiA
   });
 
   if (!response.ok) {
+    if (response.status === 404 || response.status === 502 || response.status === 504) {
+      return requestLegacyReflectAssist(payload);
+    }
     throw new Error(`AI辅助生成失败: ${response.status}`);
   }
 
