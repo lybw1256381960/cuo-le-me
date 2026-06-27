@@ -50,6 +50,7 @@ Render uses `render.yaml` and needs these environment variables:
 
 - `GEMINI_API_KEY`: set in the Render dashboard, never commit it.
 - `GEMINI_MODEL`: defaults to `gemini-2.5-flash-lite`.
+- `GEMINI_MODEL_FALLBACKS`: optional comma-separated fallback models, defaults to `gemini-2.5-flash,gemini-2.0-flash`.
 - `DATABASE_PATH`: `/var/data/app.sqlite`.
 - `NODE_VERSION`: `24.16.0`.
 

@@ -11,6 +11,13 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const GEMINI_MODEL_CANDIDATES = Array.from(new Set([
+  GEMINI_MODEL,
+  ...(process.env.GEMINI_MODEL_FALLBACKS || "gemini-2.5-flash,gemini-2.0-flash")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean),
+]));
 
 // Enable CORS for Netlify frontend
 app.use(cors({
@@ -95,6 +102,38 @@ const shouldSkipGeminiRetry = (error: any) => {
   const message = `${error?.message || ""} ${JSON.stringify(error || {})}`;
   return /RESOURCE_EXHAUSTED|quota|API_KEY_INVALID|api key not valid|PERMISSION_DENIED/i.test(message);
 };
+
+const shouldTryNextGeminiModel = (error: any) => {
+  const message = `${error?.message || ""} ${JSON.stringify(error || {})}`;
+  return /UNAVAILABLE|503|high demand|temporarily|try again later/i.test(message);
+};
+
+async function generateGeminiContentWithFallback(params: {
+  contents: any;
+  config: any;
+  label: string;
+}) {
+  let lastError: any = null;
+
+  for (const model of GEMINI_MODEL_CANDIDATES) {
+    try {
+      const response = await aiClient.models.generateContent({
+        model,
+        contents: params.contents,
+        config: params.config,
+      });
+      return { response, modelUsed: model };
+    } catch (err: any) {
+      lastError = err;
+      if (shouldSkipGeminiRetry(err) || !shouldTryNextGeminiModel(err)) {
+        throw err;
+      }
+      console.warn(`${params.label} model ${model} unavailable, trying next Gemini model:`, err);
+    }
+  }
+
+  throw lastError;
+}
 
 const chooseFallbackCategory = (rawText: string, explicitCategory?: string) => {
   if (explicitCategory) return explicitCategory;
@@ -339,24 +378,29 @@ ${textAttachmentSummary ? `附件文本内容:\n${textAttachmentSummary}` : "如
       : prompt;
 
     let response;
+    let modelUsed = GEMINI_MODEL;
     try {
-      response = await aiClient.models.generateContent({
-        model: GEMINI_MODEL,
+      const result = await generateGeminiContentWithFallback({
         contents: noteContents,
         config: structuredConfig,
+        label: "Gemini AI note assist structured call",
       });
+      response = result.response;
+      modelUsed = result.modelUsed;
     } catch (firstErr: any) {
       if (shouldSkipGeminiRetry(firstErr)) throw firstErr;
       console.warn("Gemini AI note assist structured call failed, retrying plain JSON mode:", firstErr);
-      response = await aiClient.models.generateContent({
-        model: GEMINI_MODEL,
+      const result = await generateGeminiContentWithFallback({
         contents: noteContents,
         config: {
           responseMimeType: "application/json",
           maxOutputTokens: 2200,
           temperature: 0.35,
         },
+        label: "Gemini AI note assist plain JSON call",
       });
+      response = result.response;
+      modelUsed = result.modelUsed;
     }
 
     const parsed = parseGeminiJsonObject(response.text || "");
@@ -369,6 +413,7 @@ ${textAttachmentSummary ? `附件文本内容:\n${textAttachmentSummary}` : "如
       tags: asStringArray(parsed.tags, 6).length ? asStringArray(parsed.tags, 6) : fallback.tags,
       follow_up_questions: asStringArray(parsed.follow_up_questions, 4).length ? asStringArray(parsed.follow_up_questions, 4) : fallback.follow_up_questions,
       isSimulated: false,
+      modelUsed,
     });
   } catch (err: any) {
     console.warn("Gemini AI note assist warning - fallback activated:", err);
